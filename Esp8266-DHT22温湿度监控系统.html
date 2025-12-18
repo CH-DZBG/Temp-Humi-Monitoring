@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DHT22 温湿度监控系统</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            padding: 20px 0;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .card-header i {
+            font-size: 1.5em;
+            margin-right: 10px;
+        }
+        
+        .card-header h3 {
+            color: #333;
+            font-size: 1.3em;
+        }
+        
+        .data-display {
+            text-align: center;
+        }
+        
+        .data-value {
+            font-size: 3.5em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .temperature {
+            color: #e74c3c;
+        }
+        
+        .humidity {
+            color: #3498db;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-online {
+            background: #2ecc71;
+            box-shadow: 0 0 10px #2ecc71;
+        }
+        
+        .status-offline {
+            background: #e74c3c;
+        }
+        
+        .chart-container {
+            height: 300px;
+            margin-top: 20px;
+        }
+        
+        .devices-panel {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+        
+        .devices-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .device-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            border-left: 4px solid #667eea;
+            transition: all 0.3s ease;
+        }
+        
+        .device-card:hover {
+            background: #f0f2f5;
+            transform: translateX(5px);
+        }
+        
+        .device-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .device-name {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .device-status {
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .device-data {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .temp-badge, .hum-badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+        
+        .temp-badge {
+            background: #ffebee;
+            color: #e74c3c;
+        }
+        
+        .hum-badge {
+            background: #e3f2fd;
+            color: #3498db;
+        }
+        
+        .config-panel {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+        }
+        
+        .stats-bar {
+            display: flex;
+            justify-content: space-around;
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            color: white;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        .data-table th, .data-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .data-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .data-table tr:hover {
+            background: #f5f5f5;
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+        
+        .notification.success {
+            background: #2ecc71;
+        }
+        
+        .notification.error {
+            background: #e74c3c;
+        }
+        
+        .notification.info {
+            background: #3498db;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 12px 25px;
+            cursor: pointer;
+            font-weight: 500;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+        }
+        
+        .no-data i {
+            font-size: 3em;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+        
+        .last-update {
+            text-align: center;
+            color: rgba(255,255,255,0.8);
+            margin-top: 30px;
+            font-size: 0.9em;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .stats-bar {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .data-value {
+                font-size: 2.5em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌡️ DHT22 温湿度监控系统</h1>
+            <p>实时监控多个ESP8266设备的温湿度数据</p>
+        </div>
+        
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-value" id="total-devices">0</div>
+                <div class="stat-label">设备总数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="online-devices">0</div>
+                <div class="stat-label">在线设备</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="avg-temperature">--°C</div>
+                <div class="stat-label">平均温度</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="avg-humidity">--%</div>
+                <div class="stat-label">平均湿度</div>
+            </div>
+        </div>
+        
+        <div class="dashboard">
+            <div class="card">
+                <div class="card-header">
+                    <i>🌡️</i>
+                    <h3>当前温度</h3>
+                </div>
+                <div class="data-display">
+                    <div class="data-value temperature" id="current-temp">--°C</div>
+                    <p id="temp-device">--</p>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <i>💧</i>
+                    <h3>当前湿度</h3>
+                </div>
+                <div class="data-display">
+                    <div class="data-value humidity" id="current-hum">--%</div>
+                    <p id="hum-device">--</p>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <i>📈</i>
+                    <h3>数据统计</h3>
+                </div>
+                <div class="data-display">
+                    <div style="margin: 20px 0; text-align: left;">
+                        <div>最高温度: <span id="max-temp" class="temperature">--°C</span></div>
+                        <div>最低温度: <span id="min-temp" class="temperature">--°C</span></div>
+                        <div>平均温度: <span id="avg-temp-display" class="temperature">--°C</span></div>
+                        <div>平均湿度: <span id="avg-hum-display" class="humidity">--%</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="devices-panel">
+            <div class="card-header">
+                <i>📱</i>
+                <h3>设备监控</h3>
+                <div class="device-status">
+                    <span class="status-indicator" id="mqtt-status-indicator"></span>
+                    MQTT状态: <span id="mqtt-status-text">未连接</span>
+                </div>
+            </div>
+            
+            <div class="tabs">
+                <div class="tab active" data-tab="devices">设备列表</div>
+                <div class="tab" data-tab="chart">数据图表</div>
+                <div class="tab" data-tab="history">历史数据</div>
+            </div>
+            
+            <div class="tab-content active" id="devices-tab">
+                <div id="devices-container" class="devices-grid">
+                    <div class="no-data">
+                        <div>📡</div>
+                        <h3>暂无设备数据</h3>
+                        <p>请确保MQTT连接正常，并且有设备在发布数据</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="tab-content" id="chart-tab">
+                <div class="chart-container">
+                    <canvas id="dataChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="tab-content" id="history-tab">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>时间</th>
+                            <th>设备</th>
+                            <th>温度</th>
+                            <th>湿度</th>
+                            <th>信号强度</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body">
+                        <tr>
+                            <td colspan="5" style="text-align: center; padding: 40px; color: #999;">
+                                暂无历史数据
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="config-panel">
+            <div class="card-header">
+                <i>⚙️</i>
+                <h3>MQTT配置</h3>
+            </div>
+            
+            <div class="form-group">
+                <label>MQTT服务器地址:</label>
+                <input type="text" id="mqtt-broker" class="form-control" value="wss://broker.hivemq.com:8884/mqtt" placeholder="wss://broker.hivemq.com:8884/mqtt">
+                <small style="color: #666; margin-top: 5px; display: block;">推荐使用HiveMQ服务器，连接更稳定</small>
+            </div>
+            
+            <div class="form-group">
+                <label>订阅主题:</label>
+                <input type="text" id="mqtt-topic" class="form-control" value="dht22/sensor_data" placeholder="dht22/sensor_data">
+                <small style="color: #666; margin-top: 5px; display: block;">ESP8266发布数据的主题</small>
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button onclick="connectMQTT()" class="btn" id="connect-btn">连接MQTT服务器</button>
+                <button onclick="clearData()" class="btn btn-danger">清除数据</button>
+            </div>
+            
+            <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <h4 style="margin-bottom: 10px;">📡 连接状态</h4>
+                <div>MQTT服务器: <span id="current-broker">未连接</span></div>
+                <div>订阅主题: <span id="current-topic">未设置</span></div>
+                <div>最后消息: <span id="last-message-time">--</span></div>
+                <div>接收消息数: <span id="message-count">0</span></div>
+            </div>
+        </div>
+        
+        <div class="last-update">
+            <p>监控系统 v1.1 | 数据自动更新 | 支持多设备监控 | 最后更新: <span id="last-update-time">--:--:--</span></p>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let mqttClient = null;
+        let dataChart = null;
+        let devices = new Map();
+        let selectedDevice = null;
+        let messageCount = 0;
+        
+        // 图表数据
+        let chartData = {
+            labels: [],
+            datasets: [{
+                label: '温度 (°C)',
+                data: [],
+                borderColor: 'rgb(231, 76, 60)',
+                backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                borderWidth: 2,
+                tension: 0.4,
+                fill: true
+            }, {
+                label: '湿度 (%)',
+                data: [],
+                borderColor: 'rgb(52, 152, 219)',
+                backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                borderWidth: 2,
+                tension: 0.4,
+                fill: true
+            }]
+        };
+        
+        // 显示通知
+        function showNotification(message, type = 'info') {
+            const existing = document.querySelector('.notification');
+            if (existing) existing.remove();
+            
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.innerHTML = `<div>${message}</div>`;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => notification.remove(), 3000);
+        }
+        
+        // 初始化图表
+        function initChart() {
+            const ctx = document.getElementById('dataChart').getContext('2d');
+            
+            if (dataChart) {
+                dataChart.destroy();
+            }
+            
+            dataChart = new Chart(ctx, {
+                type: 'line',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { font: { size: 14 } }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(0,0,0,0.05)' },
+                            ticks: { font: { size: 12 } }
+                        },
+                        y: {
+                            beginAtZero: false,
+                            grid: { color: 'rgba(0,0,0,0.05)' },
+                            ticks: { font: { size: 12 } }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 连接MQTT服务器
+        function connectMQTT() {
+            const broker = document.getElementById('mqtt-broker').value.trim();
+            const topic = document.getElementById('mqtt-topic').value.trim();
+            
+            if (!broker || !topic) {
+                showNotification('请填写MQTT服务器地址和订阅主题', 'error');
+                return;
+            }
+            
+            // 如果已连接，先断开
+            if (mqttClient && mqttClient.connected) {
+                mqttClient.end();
+            }
+            
+            // 更新UI状态
+            document.getElementById('current-broker').textContent = broker;
+            document.getElementById('current-topic').textContent = topic;
+            document.getElementById('connect-btn').textContent = '连接中...';
+            document.getElementById('connect-btn').disabled = true;
+            
+            // MQTT连接选项
+            const options = {
+                clean: true,
+                connectTimeout: 4000,
+                clientId: 'web_client_' + Math.random().toString(16).substr(2, 8),
+                keepalive: 60
+            };
+            
+            try {
+                // 连接MQTT
+                mqttClient = mqtt.connect(broker, options);
+                
+                mqttClient.on('connect', () => {
+                    console.log('MQTT连接成功');
+                    showNotification('MQTT连接成功', 'success');
+                    
+                    // 更新状态显示
+                    document.getElementById('mqtt-status-indicator').className = 'status-indicator status-online';
+                    document.getElementById('mqtt-status-text').textContent = '已连接';
+                    document.getElementById('connect-btn').textContent = '已连接';
+                    
+                    // 订阅主题
+                    mqttClient.subscribe(topic, (err) => {
+                        if (err) {
+                            console.error('订阅失败:', err);
+                            showNotification('订阅失败: ' + err.message, 'error');
+                        } else {
+                            console.log(`已订阅主题: ${topic}`);
+                        }
+                    });
+                });
+                
+                mqttClient.on('message', (topic, message) => {
+                    try {
+                        const data = JSON.parse(message.toString());
+                        processMessage(topic, data);
+                    } catch (error) {
+                        console.error('解析消息失败:', error, '原始消息:', message.toString());
+                    }
+                });
+                
+                mqttClient.on('error', (error) => {
+                    console.error('MQTT错误:', error);
+                    showNotification('连接错误: ' + error.message, 'error');
+                    
+                    document.getElementById('mqtt-status-indicator').className = 'status-indicator status-offline';
+                    document.getElementById('mqtt-status-text').textContent = '连接失败';
+                    document.getElementById('connect-btn').textContent = '连接MQTT服务器';
+                    document.getElementById('connect-btn').disabled = false;
+                });
+                
+                mqttClient.on('close', () => {
+                    console.log('MQTT连接断开');
+                    showNotification('连接已断开', 'info');
+                    
+                    document.getElementById('mqtt-status-indicator').className = 'status-indicator status-offline';
+                    document.getElementById('mqtt-status-text').textContent = '已断开';
+                    document.getElementById('connect-btn').textContent = '连接MQTT服务器';
+                    document.getElementById('connect-btn').disabled = false;
+                });
+                
+            } catch (error) {
+                console.error('连接失败:', error);
+                showNotification('连接失败: ' + error.message, 'error');
+                
+                document.getElementById('connect-btn').textContent = '连接MQTT服务器';
+                document.getElementById('connect-btn').disabled = false;
+            }
+        }
+        
+        // 处理MQTT消息
+        function processMessage(topic, data) {
+            messageCount++;
+            document.getElementById('message-count').textContent = messageCount;
+            
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString();
+            
+            // 更新最后消息时间
+            document.getElementById('last-message-time').textContent = timeStr;
+            document.getElementById('last-update-time').textContent = timeStr;
+            
+            // 提取设备ID - 处理多种可能的字段名
+            let deviceId = data.device_id || data.device || data.deviceId || '未知设备';
+            
+            // 如果设备ID是"未知设备"，尝试从主题中提取
+            if (deviceId === '未知设备' && topic.includes('/')) {
+                const parts = topic.split('/');
+                deviceId = parts[parts.length - 1] || '未知设备';
+            }
+            
+            // 存储设备数据
+            if (!devices.has(deviceId)) {
+                devices.set(deviceId, {
+                    id: deviceId,
+                    data: [],
+                    lastUpdate: now.getTime(),
+                    online: true
+                });
+                
+                // 如果是第一个设备，自动选中
+                if (!selectedDevice) {
+                    selectedDevice = deviceId;
+                }
+            }
+            
+            const device = devices.get(deviceId);
+            device.lastUpdate = now.getTime();
+            device.online = true;
+            
+            // 提取温度湿度数据 - 处理多种可能的字段名
+            const temperature = data.temperature !== undefined ? data.temperature : 
+                              (data.temp !== undefined ? data.temp : null);
+            const humidity = data.humidity !== undefined ? data.humidity : 
+                           (data.hum !== undefined ? data.hum : null);
+            const rssi = data.rssi !== undefined ? data.rssi : null;
+            
+            // 创建记录
+            const record = {
+                time: now,
+                timestamp: data.timestamp || now.getTime(),
+                temperature: temperature,
+                humidity: humidity,
+                rssi: rssi,
+                topic: topic
+            };
+            
+            device.data.push(record);
+            
+            // 保持最近50条记录
+            if (device.data.length > 50) {
+                device.data.shift();
+            }
+            
+            // 更新显示
+            updateMainDisplay(deviceId, record);
+            updateDevicesList();
+            updateStatistics();
+            updateHistoryTable(deviceId, record);
+            
+            // 如果这是选中的设备，更新图表
+            if (deviceId === selectedDevice) {
+                updateChart(device);
+            }
+        }
+        
+        // 更新主显示
+        function updateMainDisplay(deviceId, record) {
+            if (record.temperature !== null) {
+                document.getElementById('current-temp').textContent = 
+                    record.temperature.toFixed(1) + '°C';
+                document.getElementById('temp-device').textContent = deviceId;
+            }
+            
+            if (record.humidity !== null) {
+                document.getElementById('current-hum').textContent = 
+                    record.humidity.toFixed(1) + '%';
+                document.getElementById('hum-device').textContent = deviceId;
+            }
+        }
+        
+        // 更新图表
+        function updateChart(device) {
+            if (!device || device.data.length === 0) return;
+            
+            // 清空图表数据
+            chartData.labels = [];
+            chartData.datasets[0].data = [];
+            chartData.datasets[1].data = [];
+            
+            // 添加最近20个数据点
+            const recentData = device.data.slice(-20);
+            
+            recentData.forEach(record => {
+                const timeLabel = record.time.getHours().toString().padStart(2, '0') + ':' + 
+                                record.time.getMinutes().toString().padStart(2, '0') + ':' + 
+                                record.time.getSeconds().toString().padStart(2, '0');
+                
+                chartData.labels.push(timeLabel);
+                chartData.datasets[0].data.push(record.temperature);
+                chartData.datasets[1].data.push(record.humidity);
+            });
+            
+            // 初始化或更新图表
+            if (!dataChart) {
+                initChart();
+            } else {
+                dataChart.update('none');
+            }
+        }
+        
+        // 更新设备列表
+        function updateDevicesList() {
+            const container = document.getElementById('devices-container');
+            
+            if (devices.size === 0) {
+                container.innerHTML = `
+                    <div class="no-data">
+                        <div>📡</div>
+                        <h3>暂无设备数据</h3>
+                        <p>请确保MQTT连接正常，并且有设备在发布数据</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // 清空容器
+            container.innerHTML = '';
+            
+            // 添加设备卡片
+            devices.forEach((device, deviceId) => {
+                const latestRecord = device.data[device.data.length - 1];
+                const timeDiff = (Date.now() - device.lastUpdate) / 1000;
+                const isOnline = timeDiff < 60;
+                
+                const deviceCard = document.createElement('div');
+                deviceCard.className = 'device-card';
+                deviceCard.style.borderLeftColor = deviceId === selectedDevice ? '#667eea' : '#ddd';
+                deviceCard.style.cursor = 'pointer';
+                
+                deviceCard.onclick = () => {
+                    selectedDevice = deviceId;
+                    updateDevicesList();
+                    
+                    if (device.data.length > 0) {
+                        updateMainDisplay(deviceId, device.data[device.data.length - 1]);
+                        updateChart(device);
+                    }
+                };
+                
+                let content = `
+                    <div class="device-header">
+                        <div class="device-name">${deviceId}</div>
+                        <div class="device-status">
+                            <span class="status-indicator ${isOnline ? 'status-online' : 'status-offline'}"></span>
+                            ${isOnline ? '在线' : '离线'}
+                        </div>
+                    </div>
+                `;
+                
+                if (latestRecord) {
+                    content += `
+                        <div class="device-data">
+                            <div>
+                                <div style="color: #666; font-size: 0.9em; margin-bottom: 5px;">温度</div>
+                                <div class="temp-badge">${latestRecord.temperature !== null ? latestRecord.temperature.toFixed(1) + '°C' : 'N/A'}</div>
+                            </div>
+                            <div>
+                                <div style="color: #666; font-size: 0.9em; margin-bottom: 5px;">湿度</div>
+                                <div class="hum-badge">${latestRecord.humidity !== null ? latestRecord.humidity.toFixed(1) + '%' : 'N/A'}</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px; font-size: 0.8em; color: #888;">
+                            最后更新: ${new Date(device.lastUpdate).toLocaleTimeString()}
+                        </div>
+                    `;
+                } else {
+                    content += `
+                        <div style="color: #999; text-align: center; padding: 10px 0;">
+                            暂无数据
+                        </div>
+                    `;
+                }
+                
+                deviceCard.innerHTML = content;
+                container.appendChild(deviceCard);
+            });
+        }
+        
+        // 更新统计数据
+        function updateStatistics() {
+            let totalTemp = 0;
+            let totalHum = 0;
+            let tempCount = 0;
+            let humCount = 0;
+            let maxTemp = -Infinity;
+            let minTemp = Infinity;
+            let onlineCount = 0;
+            
+            const now = Date.now();
+            
+            devices.forEach(device => {
+                if (now - device.lastUpdate < 60000) {
+                    onlineCount++;
+                }
+                
+                if (device.data.length > 0) {
+                    const latest = device.data[device.data.length - 1];
+                    
+                    if (latest.temperature !== null) {
+                        totalTemp += latest.temperature;
+                        tempCount++;
+                        maxTemp = Math.max(maxTemp, latest.temperature);
+                        minTemp = Math.min(minTemp, latest.temperature);
+                    }
+                    
+                    if (latest.humidity !== null) {
+                        totalHum += latest.humidity;
+                        humCount++;
+                    }
+                }
+            });
+            
+            // 更新显示
+            document.getElementById('total-devices').textContent = devices.size;
+            document.getElementById('online-devices').textContent = onlineCount;
+            
+            if (tempCount > 0) {
+                const avgTemp = totalTemp / tempCount;
+                document.getElementById('avg-temperature').textContent = avgTemp.toFixed(1) + '°C';
+                document.getElementById('avg-temp-display').textContent = avgTemp.toFixed(1) + '°C';
+                document.getElementById('max-temp').textContent = maxTemp.toFixed(1) + '°C';
+                document.getElementById('min-temp').textContent = minTemp.toFixed(1) + '°C';
+            }
+            
+            if (humCount > 0) {
+                const avgHum = totalHum / humCount;
+                document.getElementById('avg-humidity').textContent = avgHum.toFixed(1) + '%';
+                document.getElementById('avg-hum-display').textContent = avgHum.toFixed(1) + '%';
+            }
+        }
+        
+        // 更新历史数据表
+        function updateHistoryTable(deviceId, record) {
+            const tbody = document.getElementById('history-table-body');
+            
+            // 移除"暂无数据"行
+            if (tbody.children.length === 1 && tbody.children[0].children.length === 1) {
+                tbody.innerHTML = '';
+            }
+            
+            const timeStr = record.time.toLocaleTimeString();
+            const tempStr = record.temperature !== null ? record.temperature.toFixed(1) + '°C' : 'N/A';
+            const humStr = record.humidity !== null ? record.humidity.toFixed(1) + '%' : 'N/A';
+            const rssiStr = record.rssi !== null ? record.rssi + ' dBm' : 'N/A';
+            
+            const newRow = document.createElement('tr');
+            newRow.innerHTML = `
+                <td>${timeStr}</td>
+                <td>${deviceId}</td>
+                <td>${tempStr}</td>
+                <td>${humStr}</td>
+                <td>${rssiStr}</td>
+            `;
+            
+            tbody.insertBefore(newRow, tbody.firstChild);
+            
+            // 限制行数
+            if (tbody.children.length > 50) {
+                tbody.removeChild(tbody.lastChild);
+            }
+        }
+        
+        // 清除数据
+        function clearData() {
+            if (confirm('确定要清除所有数据吗？')) {
+                devices.clear();
+                selectedDevice = null;
+                messageCount = 0;
+                
+                // 重置显示
+                document.getElementById('current-temp').textContent = '--°C';
+                document.getElementById('current-hum').textContent = '--%';
+                document.getElementById('temp-device').textContent = '--';
+                document.getElementById('hum-device').textContent = '--';
+                document.getElementById('max-temp').textContent = '--°C';
+                document.getElementById('min-temp').textContent = '--°C';
+                document.getElementById('avg-temp-display').textContent = '--°C';
+                document.getElementById('avg-hum-display').textContent = '--%';
+                document.getElementById('total-devices').textContent = '0';
+                document.getElementById('online-devices').textContent = '0';
+                document.getElementById('avg-temperature').textContent = '--°C';
+                document.getElementById('avg-humidity').textContent = '--%';
+                document.getElementById('message-count').textContent = '0';
+                
+                // 清空表格
+                const tbody = document.getElementById('history-table-body');
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 40px; color: #999;">
+                            暂无历史数据
+                        </td>
+                    </tr>
+                `;
+                
+                // 清空设备列表
+                const container = document.getElementById('devices-container');
+                container.innerHTML = `
+                    <div class="no-data">
+                        <div>📡</div>
+                        <h3>暂无设备数据</h3>
+                        <p>请确保MQTT连接正常，并且有设备在发布数据</p>
+                    </div>
+                `;
+                
+                // 清空图表
+                if (dataChart) {
+                    chartData.labels = [];
+                    chartData.datasets[0].data = [];
+                    chartData.datasets[1].data = [];
+                    dataChart.update();
+                }
+                
+                showNotification('数据已清除', 'info');
+            }
+        }
+        
+        // 初始化标签页
+        function initTabs() {
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const tabId = tab.getAttribute('data-tab');
+                    
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    
+                    tab.classList.add('active');
+                    document.getElementById(tabId + '-tab').classList.add('active');
+                    
+                    if (tabId === 'chart' && selectedDevice && devices.has(selectedDevice)) {
+                        updateChart(devices.get(selectedDevice));
+                    }
+                });
+            });
+        }
+        
+        // 定期检查设备状态
+        function checkDeviceStatus() {
+            const now = Date.now();
+            
+            devices.forEach(device => {
+                device.online = (now - device.lastUpdate) < 60000;
+            });
+            
+            updateDevicesList();
+            updateStatistics();
+        }
+        
+        // 页面加载完成
+        window.onload = function() {
+            // 初始化标签页
+            initTabs();
+            
+            // 初始化图表
+            initChart();
+            
+            // 5秒后自动连接
+            setTimeout(() => {
+                connectMQTT();
+            }, 5000);
+            
+            // 定期检查设备状态
+            setInterval(checkDeviceStatus, 30000);
+            
+            // 显示欢迎消息
+            setTimeout(() => {
+                showNotification('系统已启动，5秒后自动连接MQTT服务器...', 'info');
+            }, 1000);
+        };
+    </script>
+</body>
+</html>
+
+
+
