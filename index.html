@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DHT22 温湿度监控系统</title>
+    <title>温湿度监控系统</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -363,6 +363,43 @@
             font-size: 0.9em;
         }
         
+        .control-panel {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .control-btn {
+            padding: 8px 16px;
+            background: #f8f9fa;
+            border: 2px solid #667eea;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+        
+        .control-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+        
+        .control-btn.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .command-input {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .command-input input {
+            flex: 1;
+        }
+        
         @media (max-width: 768px) {
             .dashboard {
                 grid-template-columns: 1fr;
@@ -380,14 +417,18 @@
             .data-value {
                 font-size: 2.5em;
             }
+            
+            .control-panel {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🌡️ DHT22 温湿度监控系统</h1>
-            <p>实时监控多个ESP8266设备的温湿度数据</p>
+            <h1>🌡️ 温湿度监控系统  </h1>
+            <p>实时监控多个设备的温湿度数据</p>
         </div>
         
         <div class="stats-bar">
@@ -417,7 +458,7 @@
                 </div>
                 <div class="data-display">
                     <div class="data-value temperature" id="current-temp">--°C</div>
-                    <p id="temp-device">--</p>
+                    <p id="temp-device">设备: --</p>
                 </div>
             </div>
             
@@ -428,7 +469,7 @@
                 </div>
                 <div class="data-display">
                     <div class="data-value humidity" id="current-hum">--%</div>
-                    <p id="hum-device">--</p>
+                    <p id="hum-device">设备: --</p>
                 </div>
             </div>
             
@@ -443,6 +484,9 @@
                         <div>最低温度: <span id="min-temp" class="temperature">--°C</span></div>
                         <div>平均温度: <span id="avg-temp-display" class="temperature">--°C</span></div>
                         <div>平均湿度: <span id="avg-hum-display" class="humidity">--%</span></div>
+                        <div style="margin-top: 10px; font-size: 0.9em; color: #666;">
+                            传感器状态: <span id="sensor-status">--</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -462,6 +506,7 @@
                 <div class="tab active" data-tab="devices">设备列表</div>
                 <div class="tab" data-tab="chart">数据图表</div>
                 <div class="tab" data-tab="history">历史数据</div>
+                <div class="tab" data-tab="control">设备控制</div>
             </div>
             
             <div class="tab-content active" id="devices-tab">
@@ -488,17 +533,61 @@
                             <th>设备</th>
                             <th>温度</th>
                             <th>湿度</th>
-                            <th>信号强度</th>
+                            <th>传感器状态</th>
+                            <th>LED状态</th>
                         </tr>
                     </thead>
                     <tbody id="history-table-body">
                         <tr>
-                            <td colspan="5" style="text-align: center; padding: 40px; color: #999;">
+                            <td colspan="6" style="text-align: center; padding: 40px; color: #999;">
                                 暂无历史数据
                             </td>
                         </tr>
                     </tbody>
                 </table>
+            </div>
+            
+            <div class="tab-content" id="control-tab">
+                <h4>设备控制命令</h4>
+                <p style="color: #666; margin-bottom: 15px;">向设备发送控制指令</p>
+                
+                <div class="control-panel">
+                    <div class="control-btn" onclick="sendCommand('GET_TEMP')">获取温度</div>
+                    <div class="control-btn" onclick="sendCommand('GET_HUMI')">获取湿度</div>
+                    <div class="control-btn" onclick="sendCommand('GET_ALL')">获取全部</div>
+                    <div class="control-btn" onclick="sendCommand('STATUS')">设备状态</div>
+                    <div class="control-btn" onclick="sendCommand('WIFI_INFO')">WiFi信息</div>
+                </div>
+                
+                <div style="margin-top: 20px;">
+                    <h4>LED控制</h4>
+                    <div class="control-panel">
+                        <div class="control-btn" onclick="controlLED('ON')">打开LED</div>
+                        <div class="control-btn" onclick="controlLED('OFF')">关闭LED</div>
+                        <div class="control-btn" onclick="controlLED('TOGGLE')">切换LED</div>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 20px;">
+                    <h4>自定义命令</h4>
+                    <div class="command-input">
+                        <input type="text" id="custom-command" class="form-control" placeholder="输入自定义命令，如: RESTART, GET_TEMP, GET_HUMI等">
+                        <button class="btn" onclick="sendCustomCommand()">发送</button>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                    <h4>📡 命令说明</h4>
+                    <ul style="color: #666; padding-left: 20px; margin-top: 10px;">
+                        <li><strong>GET_TEMP</strong>: 获取当前温度</li>
+                        <li><strong>GET_HUMI</strong>: 获取当前湿度</li>
+                        <li><strong>GET_ALL</strong>: 获取全部传感器数据</li>
+                        <li><strong>STATUS</strong>: 获取设备状态</li>
+                        <li><strong>WIFI_INFO</strong>: 获取WiFi信息</li>
+                        <li><strong>RESTART</strong>: 重启设备</li>
+                        <li><strong>LED控制</strong>: ON/OFF/TOGGLE</li>
+                    </ul>
+                </div>
             </div>
         </div>
         
@@ -511,13 +600,19 @@
             <div class="form-group">
                 <label>MQTT服务器地址:</label>
                 <input type="text" id="mqtt-broker" class="form-control" value="wss://broker.hivemq.com:8884/mqtt" placeholder="wss://broker.hivemq.com:8884/mqtt">
-                <small style="color: #666; margin-top: 5px; display: block;">推荐使用HiveMQ服务器，连接更稳定</small>
+                <small style="color: #666; margin-top: 5px; display: block;">使用WebSocket连接 (HiveMQ公共服务器)</small>
             </div>
             
             <div class="form-group">
-                <label>订阅主题:</label>
-                <input type="text" id="mqtt-topic" class="form-control" value="dht22/sensor_data" placeholder="dht22/sensor_data">
-                <small style="color: #666; margin-top: 5px; display: block;">ESP8266发布数据的主题</small>
+                <label>数据订阅主题:</label>
+                <input type="text" id="mqtt-topic-data" class="form-control" value="ch_dzbg/data/#" placeholder="ch_dzbg/data/#">
+                <small style="color: #666; margin-top: 5px; display: block;">使用通配符 # 订阅所有子主题</small>
+            </div>
+            
+            <div class="form-group">
+                <label>控制发布主题:</label>
+                <input type="text" id="mqtt-topic-command" class="form-control" value="ch_dzbg/data/cmd" placeholder="ch_dzbg/data/cmd">
+                <small style="color: #666; margin-top: 5px; display: block;">发送控制命令到该主题</small>
             </div>
             
             <div style="display: flex; gap: 10px;">
@@ -528,14 +623,16 @@
             <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
                 <h4 style="margin-bottom: 10px;">📡 连接状态</h4>
                 <div>MQTT服务器: <span id="current-broker">未连接</span></div>
-                <div>订阅主题: <span id="current-topic">未设置</span></div>
+                <div>数据主题: <span id="current-topic-data">未设置</span></div>
+                <div>控制主题: <span id="current-topic-command">未设置</span></div>
                 <div>最后消息: <span id="last-message-time">--</span></div>
                 <div>接收消息数: <span id="message-count">0</span></div>
+                <div>已连接设备: <span id="connected-devices">0</span></div>
             </div>
         </div>
         
         <div class="last-update">
-            <p>监控系统 v1.1 | 数据自动更新 | 支持多设备监控 | 最后更新: <span id="last-update-time">--:--:--</span></p>
+            <p>监控系统 v2.0 | ESP32 AHT20 监控 | 支持双向控制 | 最后更新: <span id="last-update-time">--:--:--</span></p>
         </div>
     </div>
 
@@ -546,6 +643,7 @@
         let devices = new Map();
         let selectedDevice = null;
         let messageCount = 0;
+        let commandTopic = "ch_dzbg/data/cmd";  // 默认命令主题
         
         // 图表数据
         let chartData = {
@@ -620,12 +718,16 @@
         // 连接MQTT服务器
         function connectMQTT() {
             const broker = document.getElementById('mqtt-broker').value.trim();
-            const topic = document.getElementById('mqtt-topic').value.trim();
+            const topicData = document.getElementById('mqtt-topic-data').value.trim();
+            const topicCommand = document.getElementById('mqtt-topic-command').value.trim();
             
-            if (!broker || !topic) {
+            if (!broker || !topicData) {
                 showNotification('请填写MQTT服务器地址和订阅主题', 'error');
                 return;
             }
+            
+            // 保存命令主题
+            commandTopic = topicCommand;
             
             // 如果已连接，先断开
             if (mqttClient && mqttClient.connected) {
@@ -634,7 +736,8 @@
             
             // 更新UI状态
             document.getElementById('current-broker').textContent = broker;
-            document.getElementById('current-topic').textContent = topic;
+            document.getElementById('current-topic-data').textContent = topicData;
+            document.getElementById('current-topic-command').textContent = topicCommand;
             document.getElementById('connect-btn').textContent = '连接中...';
             document.getElementById('connect-btn').disabled = true;
             
@@ -658,14 +761,25 @@
                     document.getElementById('mqtt-status-indicator').className = 'status-indicator status-online';
                     document.getElementById('mqtt-status-text').textContent = '已连接';
                     document.getElementById('connect-btn').textContent = '已连接';
+                    document.getElementById('connect-btn').disabled = true;
                     
-                    // 订阅主题
-                    mqttClient.subscribe(topic, (err) => {
+                    // 订阅数据主题
+                    mqttClient.subscribe(topicData, (err) => {
                         if (err) {
                             console.error('订阅失败:', err);
                             showNotification('订阅失败: ' + err.message, 'error');
                         } else {
-                            console.log(`已订阅主题: ${topic}`);
+                            console.log(`已订阅主题: ${topicData}`);
+                            showNotification(`已订阅主题: ${topicData}`, 'success');
+                        }
+                    });
+                    
+                    // 订阅状态主题
+                    mqttClient.subscribe("ch_dzbg/data/status", (err) => {
+                        if (err) {
+                            console.error('订阅状态主题失败:', err);
+                        } else {
+                            console.log('已订阅状态主题: ch_dzbg/data/status');
                         }
                     });
                 });
@@ -720,14 +834,14 @@
             document.getElementById('last-message-time').textContent = timeStr;
             document.getElementById('last-update-time').textContent = timeStr;
             
+            // 从数据中提取设备ID
             // 提取设备ID - 处理多种可能的字段名
             let deviceId = data.device_id || data.device || data.deviceId || '未知设备';
             
-            // 如果设备ID是"未知设备"，尝试从主题中提取
-            if (deviceId === '未知设备' && topic.includes('/')) {
-                const parts = topic.split('/');
-                deviceId = parts[parts.length - 1] || '未知设备';
-            }
+            // 添加IP地址到设备ID（如果有）
+            //if (data.ip) {
+            //    deviceId = `${deviceId} (${data.ip})`;
+            //}
             
             // 存储设备数据
             if (!devices.has(deviceId)) {
@@ -735,7 +849,9 @@
                     id: deviceId,
                     data: [],
                     lastUpdate: now.getTime(),
-                    online: true
+                    online: true,
+                    sensorStatus: data.sensor_connected !== undefined ? data.sensor_connected : true,
+                    ledState: data.led_state !== undefined ? data.led_state : false
                 });
                 
                 // 如果是第一个设备，自动选中
@@ -748,12 +864,19 @@
             device.lastUpdate = now.getTime();
             device.online = true;
             
-            // 提取温度湿度数据 - 处理多种可能的字段名
-            const temperature = data.temperature !== undefined ? data.temperature : 
-                              (data.temp !== undefined ? data.temp : null);
-            const humidity = data.humidity !== undefined ? data.humidity : 
-                           (data.hum !== undefined ? data.hum : null);
-            const rssi = data.rssi !== undefined ? data.rssi : null;
+            // 更新传感器状态
+            if (data.sensor_connected !== undefined) {
+                device.sensorStatus = data.sensor_connected;
+            }
+            
+            // 更新LED状态
+            if (data.led_state !== undefined) {
+                device.ledState = data.led_state;
+            }
+            
+            // 从数据中提取温度湿度
+            const temperature = data.temperature;
+            const humidity = data.humidity;
             
             // 创建记录
             const record = {
@@ -761,8 +884,11 @@
                 timestamp: data.timestamp || now.getTime(),
                 temperature: temperature,
                 humidity: humidity,
-                rssi: rssi,
-                topic: topic
+                topic: topic,
+                sensorStatus: data.sensor_connected,
+                ledState: data.led_state,
+                ip: data.ip,
+                rssi: data.rssi
             };
             
             device.data.push(record);
@@ -786,16 +912,24 @@
         
         // 更新主显示
         function updateMainDisplay(deviceId, record) {
-            if (record.temperature !== null) {
+            if (record.temperature !== undefined) {
                 document.getElementById('current-temp').textContent = 
                     record.temperature.toFixed(1) + '°C';
-                document.getElementById('temp-device').textContent = deviceId;
+                document.getElementById('temp-device').textContent = '设备: ' + deviceId.split('(')[0];
             }
             
-            if (record.humidity !== null) {
+            if (record.humidity !== undefined) {
                 document.getElementById('current-hum').textContent = 
                     record.humidity.toFixed(1) + '%';
-                document.getElementById('hum-device').textContent = deviceId;
+                document.getElementById('hum-device').textContent = '设备: ' + deviceId.split('(')[0];
+            }
+            
+            // 更新传感器状态
+            if (record.sensorStatus !== undefined) {
+                const statusText = record.sensorStatus ? '正常' : '异常';
+                const statusColor = record.sensorStatus ? '#2ecc71' : '#e74c3c';
+                document.getElementById('sensor-status').textContent = statusText;
+                document.getElementById('sensor-status').style.color = statusColor;
             }
         }
         
@@ -883,14 +1017,18 @@
                         <div class="device-data">
                             <div>
                                 <div style="color: #666; font-size: 0.9em; margin-bottom: 5px;">温度</div>
-                                <div class="temp-badge">${latestRecord.temperature !== null ? latestRecord.temperature.toFixed(1) + '°C' : 'N/A'}</div>
+                                <div class="temp-badge">${latestRecord.temperature !== undefined ? latestRecord.temperature.toFixed(1) + '°C' : 'N/A'}</div>
                             </div>
                             <div>
                                 <div style="color: #666; font-size: 0.9em; margin-bottom: 5px;">湿度</div>
-                                <div class="hum-badge">${latestRecord.humidity !== null ? latestRecord.humidity.toFixed(1) + '%' : 'N/A'}</div>
+                                <div class="hum-badge">${latestRecord.humidity !== undefined ? latestRecord.humidity.toFixed(1) + '%' : 'N/A'}</div>
                             </div>
                         </div>
-                        <div style="margin-top: 10px; font-size: 0.8em; color: #888;">
+                        <div style="margin-top: 10px; font-size: 0.8em; color: #666; display: flex; justify-content: space-between;">
+                            <div>传感器: <span style="color: ${device.sensorStatus ? '#2ecc71' : '#e74c3c'};">${device.sensorStatus ? '正常' : '异常'}</span></div>
+                            <div>LED: <span style="color: ${device.ledState ? '#2ecc71' : '#e74c3c'};">${device.ledState ? '开' : '关'}</span></div>
+                        </div>
+                        <div style="margin-top: 5px; font-size: 0.8em; color: #888;">
                             最后更新: ${new Date(device.lastUpdate).toLocaleTimeString()}
                         </div>
                     `;
@@ -927,14 +1065,14 @@
                 if (device.data.length > 0) {
                     const latest = device.data[device.data.length - 1];
                     
-                    if (latest.temperature !== null) {
+                    if (latest.temperature !== undefined) {
                         totalTemp += latest.temperature;
                         tempCount++;
                         maxTemp = Math.max(maxTemp, latest.temperature);
                         minTemp = Math.min(minTemp, latest.temperature);
                     }
                     
-                    if (latest.humidity !== null) {
+                    if (latest.humidity !== undefined) {
                         totalHum += latest.humidity;
                         humCount++;
                     }
@@ -944,6 +1082,7 @@
             // 更新显示
             document.getElementById('total-devices').textContent = devices.size;
             document.getElementById('online-devices').textContent = onlineCount;
+            document.getElementById('connected-devices').textContent = onlineCount;
             
             if (tempCount > 0) {
                 const avgTemp = totalTemp / tempCount;
@@ -970,17 +1109,21 @@
             }
             
             const timeStr = record.time.toLocaleTimeString();
-            const tempStr = record.temperature !== null ? record.temperature.toFixed(1) + '°C' : 'N/A';
-            const humStr = record.humidity !== null ? record.humidity.toFixed(1) + '%' : 'N/A';
-            const rssiStr = record.rssi !== null ? record.rssi + ' dBm' : 'N/A';
+            const tempStr = record.temperature !== undefined ? record.temperature.toFixed(1) + '°C' : 'N/A';
+            const humStr = record.humidity !== undefined ? record.humidity.toFixed(1) + '%' : 'N/A';
+            const sensorStr = record.sensorStatus ? '正常' : '异常';
+            const sensorColor = record.sensorStatus ? '#2ecc71' : '#e74c3c';
+            const ledStr = record.ledState ? '开' : '关';
+            const ledColor = record.ledState ? '#2ecc71' : '#e74c3c';
             
             const newRow = document.createElement('tr');
             newRow.innerHTML = `
                 <td>${timeStr}</td>
-                <td>${deviceId}</td>
+                <td>${deviceId.split('(')[0]}</td>
                 <td>${tempStr}</td>
                 <td>${humStr}</td>
-                <td>${rssiStr}</td>
+                <td style="color: ${sensorColor};">${sensorStr}</td>
+                <td style="color: ${ledColor};">${ledStr}</td>
             `;
             
             tbody.insertBefore(newRow, tbody.firstChild);
@@ -989,6 +1132,54 @@
             if (tbody.children.length > 50) {
                 tbody.removeChild(tbody.lastChild);
             }
+        }
+        
+        // 发送命令
+        function sendCommand(command) {
+            if (!mqttClient || !mqttClient.connected) {
+                showNotification('请先连接MQTT服务器', 'error');
+                return;
+            }
+            
+            mqttClient.publish(commandTopic, command, { qos: 0, retain: false }, (error) => {
+                if (error) {
+                    showNotification(`发送命令失败: ${command}`, 'error');
+                    console.error('发送命令失败:', error);
+                } else {
+                    showNotification(`已发送命令: ${command}`, 'success');
+                    console.log(`命令已发送: ${command}`);
+                }
+            });
+        }
+        
+        // 控制LED
+        function controlLED(action) {
+            if (!mqttClient || !mqttClient.connected) {
+                showNotification('请先连接MQTT服务器', 'error');
+                return;
+            }
+            
+            mqttClient.publish("ch_dzbg/data/led", action, { qos: 0, retain: false }, (error) => {
+                if (error) {
+                    showNotification(`LED控制失败: ${action}`, 'error');
+                    console.error('LED控制失败:', error);
+                } else {
+                    showNotification(`已发送LED命令: ${action}`, 'success');
+                    console.log(`LED命令已发送: ${action}`);
+                }
+            });
+        }
+        
+        // 发送自定义命令
+        function sendCustomCommand() {
+            const command = document.getElementById('custom-command').value.trim();
+            if (!command) {
+                showNotification('请输入命令', 'error');
+                return;
+            }
+            
+            sendCommand(command);
+            document.getElementById('custom-command').value = '';
         }
         
         // 清除数据
@@ -1001,8 +1192,9 @@
                 // 重置显示
                 document.getElementById('current-temp').textContent = '--°C';
                 document.getElementById('current-hum').textContent = '--%';
-                document.getElementById('temp-device').textContent = '--';
-                document.getElementById('hum-device').textContent = '--';
+                document.getElementById('temp-device').textContent = '设备: --';
+                document.getElementById('hum-device').textContent = '设备: --';
+                document.getElementById('sensor-status').textContent = '--';
                 document.getElementById('max-temp').textContent = '--°C';
                 document.getElementById('min-temp').textContent = '--°C';
                 document.getElementById('avg-temp-display').textContent = '--°C';
@@ -1012,12 +1204,13 @@
                 document.getElementById('avg-temperature').textContent = '--°C';
                 document.getElementById('avg-humidity').textContent = '--%';
                 document.getElementById('message-count').textContent = '0';
+                document.getElementById('connected-devices').textContent = '0';
                 
                 // 清空表格
                 const tbody = document.getElementById('history-table-body');
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="5" style="text-align: center; padding: 40px; color: #999;">
+                        <td colspan="6" style="text-align: center; padding: 40px; color: #999;">
                             暂无历史数据
                         </td>
                     </tr>
@@ -1084,22 +1277,29 @@
             // 初始化图表
             initChart();
             
-            // 5秒后自动连接
+            // 自动连接
             setTimeout(() => {
                 connectMQTT();
-            }, 5000);
+            }, 1000);
             
             // 定期检查设备状态
             setInterval(checkDeviceStatus, 30000);
             
             // 显示欢迎消息
             setTimeout(() => {
-                showNotification('系统已启动，5秒后自动连接MQTT服务器...', 'info');
-            }, 1000);
+                showNotification('系统已启动，正在连接MQTT服务器...', 'info');
+            }, 500);
         };
+        
+        // 添加键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') {
+                const customCmd = document.getElementById('custom-command');
+                if (document.activeElement === customCmd) {
+                    sendCustomCommand();
+                }
+            }
+        });
     </script>
 </body>
 </html>
-
-
-
