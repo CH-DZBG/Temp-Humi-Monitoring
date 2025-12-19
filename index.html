@@ -400,6 +400,67 @@
             flex: 1;
         }
         
+        /* 设备状态面板样式 */
+        .status-panel {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .status-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            border-left: 4px solid #3498db;
+            transition: all 0.3s ease;
+        }
+        
+        .status-card:hover {
+            background: #f0f2f5;
+            transform: translateX(5px);
+        }
+        
+        .status-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .status-name {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .status-value {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .status-details {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        /* 选中设备标识 */
+        .device-card.selected {
+            border-left: 4px solid #667eea !important;
+            background-color: #e8f4fd;
+        }
+        
         @media (max-width: 768px) {
             .dashboard {
                 grid-template-columns: 1fr;
@@ -591,6 +652,26 @@
             </div>
         </div>
         
+        <!-- 新增设备状态监控框 -->
+        <div class="status-panel">
+            <div class="card-header">
+                <i>📊</i>
+                <h3>设备状态监控</h3>
+                <div class="device-status">
+                    <span class="status-indicator" id="status-mqtt-status-indicator"></span>
+                    状态订阅: <span id="status-mqtt-status-text">已订阅</span>
+                </div>
+            </div>
+            
+            <div id="status-container" class="status-grid">
+                <div class="no-data">
+                    <div>📡</div>
+                    <h3>暂无设备状态数据</h3>
+                    <p>等待设备发布状态信息</p>
+                </div>
+            </div>
+        </div>
+        
         <div class="config-panel">
             <div class="card-header">
                 <i>⚙️</i>
@@ -644,6 +725,7 @@
         let selectedDevice = null;
         let messageCount = 0;
         let commandTopic = "ch_dzbg/data/cmd";  // 默认命令主题
+        let deviceStatuses = new Map(); // 存储设备状态信息
         
         // 图表数据
         let chartData = {
@@ -780,6 +862,8 @@
                             console.error('订阅状态主题失败:', err);
                         } else {
                             console.log('已订阅状态主题: ch_dzbg/data/status');
+                            document.getElementById('status-mqtt-status-indicator').className = 'status-indicator status-online';
+                            document.getElementById('status-mqtt-status-text').textContent = '已订阅';
                         }
                     });
                 });
@@ -834,21 +918,48 @@
             document.getElementById('last-message-time').textContent = timeStr;
             document.getElementById('last-update-time').textContent = timeStr;
             
-            // 从数据中提取设备ID
-            // 提取设备ID - 处理多种可能的字段名
+            // 区分数据主题和状态主题
+            if (topic.includes('/status')) {
+                // 处理状态信息
+                processStatusMessage(data);
+            } else {
+                // 处理数据信息
+                processDataMessage(topic, data);
+            }
+        }
+        
+        // 处理状态消息
+        function processStatusMessage(data) {
+            // 提取设备ID
             let deviceId = data.device_id || data.device || data.deviceId || '未知设备';
             
+            // 更新状态信息
+            deviceStatuses.set(deviceId, {
+                ...data,
+                lastUpdate: new Date().getTime(),
+                topic: 'status'
+            });
+            
+            // 更新状态显示
+            updateStatusDisplay();
+        }
+        
+        // 处理数据消息
+        function processDataMessage(topic, data) {
+            // 提取设备ID - 处理多种可能的字段名
+            let deviceId = data.device_id || data.device || data.deviceId;
+            
             // 添加IP地址到设备ID（如果有）
-            //if (data.ip) {
-            //    deviceId = `${deviceId} (${data.ip})`;
-            //}
+            if (data.ip) {
+                deviceId = `${deviceId} (${data.ip})`;
+            }
             
             // 存储设备数据
             if (!devices.has(deviceId)) {
                 devices.set(deviceId, {
                     id: deviceId,
                     data: [],
-                    lastUpdate: now.getTime(),
+                    lastUpdate: new Date().getTime(),
                     online: true,
                     sensorStatus: data.sensor_connected !== undefined ? data.sensor_connected : true,
                     ledState: data.led_state !== undefined ? data.led_state : false
@@ -861,7 +972,7 @@
             }
             
             const device = devices.get(deviceId);
-            device.lastUpdate = now.getTime();
+            device.lastUpdate = new Date().getTime();
             device.online = true;
             
             // 更新传感器状态
@@ -880,8 +991,8 @@
             
             // 创建记录
             const record = {
-                time: now,
-                timestamp: data.timestamp || now.getTime(),
+                time: new Date(),
+                timestamp: data.timestamp || new Date().getTime(),
                 temperature: temperature,
                 humidity: humidity,
                 topic: topic,
@@ -898,8 +1009,11 @@
                 device.data.shift();
             }
             
-            // 更新显示
-            updateMainDisplay(deviceId, record);
+            // 更新显示 - 只更新选中的设备信息到主显示区域
+            if (selectedDevice && selectedDevice === deviceId) {
+                updateMainDisplay(deviceId, record);
+            }
+            
             updateDevicesList();
             updateStatistics();
             updateHistoryTable(deviceId, record);
@@ -989,18 +1103,35 @@
                 
                 const deviceCard = document.createElement('div');
                 deviceCard.className = 'device-card';
-                deviceCard.style.borderLeftColor = deviceId === selectedDevice ? '#667eea' : '#ddd';
+                if (deviceId === selectedDevice) {
+                    deviceCard.classList.add('selected');
+                }
                 deviceCard.style.cursor = 'pointer';
                 
                 deviceCard.onclick = () => {
                     selectedDevice = deviceId;
                     updateDevicesList();
                     
+                    // 更新主显示区域为选中的设备数据
                     if (device.data.length > 0) {
                         updateMainDisplay(deviceId, device.data[device.data.length - 1]);
                         updateChart(device);
                     }
                 };
+
+                deviceCard.setAttribute('data-device-id', deviceId); // 确保这个属性存在
+
+                // 添加双击事件
+                deviceCard.addEventListener('dblclick', function() {
+                    const deviceId = this.getAttribute('data-device-id');
+                    if (confirm(`确定要删除设备 ${deviceId} 吗？`)) {
+                        // 从设备列表中移除
+                        devices.delete(deviceId);
+                        
+                        // 重新渲染设备列表
+                        updateDevicesList();
+                    }
+                });
                 
                 let content = `
                     <div class="device-header">
@@ -1044,6 +1175,100 @@
                 container.appendChild(deviceCard);
             });
         }
+        
+        // 更新设备状态显示
+        function updateStatusDisplay() {
+            const container = document.getElementById('status-container');
+            
+            if (deviceStatuses.size === 0) {
+                container.innerHTML = `
+                    <div class="no-data">
+                        <div>📡</div>
+                        <h3>暂无设备状态数据</h3>
+                        <p>等待设备发布状态信息</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // 清空容器
+            container.innerHTML = '';
+            
+            // 添加状态卡片
+            // 遍历所有设备状态信息
+            deviceStatuses.forEach((status, deviceId) => {
+                // 计算设备最后更新时间与当前时间的差值（秒）
+                const timeDiff = (Date.now() - status.lastUpdate) / 1000;
+                // 如果60秒内有更新则认为在线
+                const isOnline = timeDiff < 60;
+                
+                // 创建一个状态卡片DOM元素
+                const statusCard = document.createElement('div');
+                statusCard.className = 'status-card';
+                // 根据在线状态设置边框颜色
+                statusCard.style.borderLeftColor = isOnline ? '#3498db' : '#ddd';
+
+                // 添加关键属性：存储设备ID
+                statusCard.setAttribute('data-device-id', deviceId);
+
+                // 添加双击事件监听器
+                statusCard.addEventListener('dblclick', function() {
+                    const deviceId = this.getAttribute('data-device-id');
+                    if (confirm(`确定要删除设备 ${deviceId} 吗？`)) {
+                        // 从状态监控中移除
+                        deviceStatuses.delete(deviceId);
+                        
+                        // 同时从设备列表中移除（如果设备列表存在）
+                        // 在Map中查找设备
+                        const device = devices.get(deviceId);
+                        if (device) {
+                            devices.delete(deviceId);
+                        }
+                        //const deviceIndex = devices.findIndex(d => d.id === deviceId);
+                        //if (deviceIndex !== -1) {
+                        //    devices.splice(deviceIndex, 1);
+                        //}
+            
+                    // 重新渲染状态监控和设备列表
+                    updateStatusDisplay();
+                    renderDeviceList();
+                }
+            });
+                
+                // 构建卡片的HTML内容
+                let content = `
+                    <div class="status-header">
+                        <div class="status-name">${deviceId}</div>
+                    </div>
+
+                    <div class="status-details">
+                `;
+                
+                // 添加其他状态信息
+                // 遍历状态对象的所有属性，排除一些内部字段
+                for (const key in status) {
+                    if (key !== 'device_id' && key !== 'device' && key !== 'deviceId' && 
+                        key !== 'lastUpdate' && key !== 'topic' && key !== 'status' && 
+                        key !== 'state' && key !== 'mode') {
+                        // 添加状态信息到内容中
+                        content += `<div>${key}: ${status[key]}</div>`;
+                    }
+                }
+                
+                // 添加最后更新时间并闭合标签
+                content += `
+                        <div>最后更新: ${new Date(status.lastUpdate).toLocaleTimeString()}</div>
+                    </div>
+                `;
+
+                // 将构建好的内容设置到卡片元素中
+                statusCard.innerHTML = content;
+                // 将卡片添加到容器中
+                container.appendChild(statusCard);
+            });
+        }
+
+
         
         // 更新统计数据
         function updateStatistics() {
@@ -1186,6 +1411,7 @@
         function clearData() {
             if (confirm('确定要清除所有数据吗？')) {
                 devices.clear();
+                deviceStatuses.clear();
                 selectedDevice = null;
                 messageCount = 0;
                 
@@ -1217,12 +1443,22 @@
                 `;
                 
                 // 清空设备列表
-                const container = document.getElementById('devices-container');
-                container.innerHTML = `
+                const devicesContainer = document.getElementById('devices-container');
+                devicesContainer.innerHTML = `
                     <div class="no-data">
                         <div>📡</div>
                         <h3>暂无设备数据</h3>
                         <p>请确保MQTT连接正常，并且有设备在发布数据</p>
+                    </div>
+                `;
+                
+                // 清空状态列表
+                const statusContainer = document.getElementById('status-container');
+                statusContainer.innerHTML = `
+                    <div class="no-data">
+                        <div>📡</div>
+                        <h3>暂无设备状态数据</h3>
+                        <p>等待设备发布状态信息</p>
                     </div>
                 `;
                 
@@ -1265,7 +1501,12 @@
                 device.online = (now - device.lastUpdate) < 60000;
             });
             
+            deviceStatuses.forEach(status => {
+                status.online = (now - status.lastUpdate) < 60000;
+            });
+            
             updateDevicesList();
+            updateStatusDisplay();
             updateStatistics();
         }
         
@@ -1303,3 +1544,4 @@
     </script>
 </body>
 </html>
+
